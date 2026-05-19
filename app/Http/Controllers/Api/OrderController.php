@@ -5,13 +5,24 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Resources\OrderResource;
+use App\Http\Resources\OrderSummaryResource;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    public function showForUser(User $user, Order $order): JsonResponse
+    {
+        $order->load(['user', 'product']);
+
+        return response()->json([
+            'data' => new OrderSummaryResource($order),
+        ]);
+    }
+
     public function store(StoreOrderRequest $request): JsonResponse
     {
         $product = Product::findOrFail($request->product_id);
