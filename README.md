@@ -1,59 +1,415 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Praktikum Laravel API — BAB III
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Implementasi tiga soal praktikum Laravel API:
 
-## About Laravel
+1. **Soal 1 (Beginner, 25%)** — `GET /api/products` dengan filter `is_active`, search, kategori, & pagination.
+2. **Soal 2 (Intermediate, 35%)** — `POST /api/orders` dengan Form Request, validasi Bahasa Indonesia, kalkulasi otomatis, & `DB::transaction()`.
+3. **Soal 3 (Expert, 40%)** — `GET /api/dashboard` analytics dengan agregasi, Eager Loading, dan caching 5 menit + endpoint flush manual.
+4. **Bonus (+10)** — Scoped Binding `GET /api/users/{user}/orders/{order}`.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Stack: **Laravel 12** · PHP 8.2+ · SQLite.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Setup
 
-## Learning Laravel
+```bash
+# 1. Install dependencies
+composer install
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+# 2. Siapkan environment
+cp .env.example .env
+php artisan key:generate
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+# 3. Siapkan SQLite (otomatis kalau pakai .env default)
+touch database/database.sqlite
 
-## Laravel Sponsors
+# 4. Jalankan migration + seeder
+php artisan migrate:fresh --seed
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+# 5. Jalankan server
+php artisan serve
+# default: http://127.0.0.1:8000
+```
 
-### Premium Partners
+Seeder otomatis menyiapkan:
+- 1 user (`Test User`, id=1)
+- 4 kategori (`Elektronik`, `Makanan & Minuman`, `Pakaian`, `Aksesoris`)
+- 15 produk (2 di antaranya `is_active=false`)
+- 15 order dengan status & tanggal bervariasi (untuk testing dashboard)
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+---
 
-## Contributing
+## Setup Postman
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+1. Buat **Environment** baru, tambahkan variable `base_url` dengan value `http://127.0.0.1:8000`.
+2. Set header default di **Headers** tab untuk setiap request:
+   - `Accept: application/json` (wajib, biar Laravel return JSON saat error, bukan HTML)
+   - `Content-Type: application/json` (untuk request dengan body)
+3. Pakai `{{base_url}}` di URL setiap request.
 
-## Code of Conduct
+---
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Soal 1 — GET Daftar Produk Aktif
 
-## Security Vulnerabilities
+`GET {{base_url}}/api/products`
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Endpoint mengembalikan hanya produk dengan `is_active=1`, terpaginasi 10 per halaman, mendukung filter search (LIKE pada name) dan filter kategori.
 
-## License
+### Test 1.1 — Daftar default (halaman 1)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/products` |
+| Body | — |
+
+**Expected:** `200 OK`
+- `data` berisi 10 produk (semua `is_active: true`)
+- Produk ID 4 (Monitor LG) & ID 10 (Celana Jeans) **tidak** muncul karena inactive
+- `meta.total: 13`, `meta.current_page: 1`, `meta.last_page: 2`, `meta.per_page: 10`
+- `links.next` menunjuk ke `?page=2`
+- Tiap produk punya field: `id`, `name`, `category_name`, `price` (format `"Rp 18.500.000"`), `stock`, `is_active`
+
+### Test 1.2 — Filter search
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/products?search=logitech` |
+
+**Expected:** `200 OK` — `meta.total: 1`, data berisi `Mouse Logitech G502`.
+
+### Test 1.3 — Filter kategori
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/products?category_id=2` |
+
+**Expected:** `200 OK` — `meta.total: 3`, hanya produk kategori `Makanan & Minuman` (Kopi Arabica, Teh Premium, Indomie Goreng).
+
+### Test 1.4 — Search + Kategori (kombinasi)
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/products?search=kopi&category_id=2` |
+
+**Expected:** `200 OK` — `meta.total: 1`, hanya `Kopi Arabica 250gr`.
+
+### Test 1.5 — Pagination halaman 2
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/products?page=2` |
+
+**Expected:** `200 OK` — `data` berisi 3 produk terakhir, `meta.from: 11`, `meta.to: 13`, `links.next: null`.
+
+---
+
+## Soal 2 — POST Order: Validasi, Kalkulasi & DB Transaction
+
+`POST {{base_url}}/api/orders`
+
+Menerima body JSON, validasi via Form Request (pesan Bahasa Indonesia), cek stok, kalkulasi `total_price = price × qty`, simpan order + decrement stok di dalam `DB::transaction()`.
+
+### Test 2.1 — Validasi error (body kosong)
+
+| Field | Value |
+|---|---|
+| Method | `POST` |
+| URL | `{{base_url}}/api/orders` |
+| Headers | `Accept: application/json`, `Content-Type: application/json` |
+| Body (raw JSON) | `{}` |
+
+**Expected:** `422 Unprocessable Entity`
+
+```json
+{
+  "message": "User wajib diisi. (and 2 more errors)",
+  "errors": {
+    "user_id":    ["User wajib diisi."],
+    "product_id": ["Produk wajib diisi."],
+    "qty":        ["Jumlah pesanan wajib diisi."]
+  }
+}
+```
+
+### Test 2.2 — Produk tidak ditemukan
+
+| Field | Value |
+|---|---|
+| Method | `POST` |
+| URL | `{{base_url}}/api/orders` |
+| Body (raw JSON) | `{"user_id":1,"product_id":99999,"qty":1}` |
+
+**Expected:** `422` — `errors.product_id: ["Produk tidak ditemukan."]`
+
+> Catatan: validasi `exists:products,id` di Form Request dijalankan dulu sebelum `findOrFail()`, jadi response 422 (bukan 404). `findOrFail()` tetap ada di controller sebagai safety net.
+
+### Test 2.3 — Stok tidak mencukupi
+
+| Field | Value |
+|---|---|
+| Method | `POST` |
+| URL | `{{base_url}}/api/orders` |
+| Body (raw JSON) | `{"user_id":1,"product_id":1,"qty":10}` |
+
+Laptop Asus ROG (`product_id=1`) stock awal 5, di-request 10.
+
+**Expected:** `422`
+
+```json
+{
+  "message": "Stok produk tidak mencukupi.",
+  "errors": {
+    "qty": ["Stok tersedia hanya 5, sedangkan permintaan 10."]
+  }
+}
+```
+
+### Test 2.4 — Order sukses
+
+| Field | Value |
+|---|---|
+| Method | `POST` |
+| URL | `{{base_url}}/api/orders` |
+| Body (raw JSON) | `{"user_id":1,"product_id":1,"qty":2}` |
+
+**Expected:** `201 Created`
+
+```json
+{
+  "message": "Order berhasil dibuat.",
+  "data": {
+    "id": 1,
+    "user_id": 1,
+    "product_id": 1,
+    "product_name": "Laptop Asus ROG",
+    "qty": 2,
+    "total_price": "Rp 37.000.000",
+    "status": "pending",
+    "created_at": "2026-05-19 12:00:00"
+  }
+}
+```
+
+**Verifikasi efek samping** — buka `GET /api/products?search=Laptop`:
+- Stok Laptop Asus ROG sekarang `3` (turun dari 5 karena `DB::transaction` menyimpan order + decrement stok secara atomic).
+
+### Test 2.5 — Qty < 1 (validasi min)
+
+| Field | Value |
+|---|---|
+| Method | `POST` |
+| URL | `{{base_url}}/api/orders` |
+| Body (raw JSON) | `{"user_id":1,"product_id":1,"qty":0}` |
+
+**Expected:** `422` — `errors.qty: ["Jumlah pesanan minimal 1."]`
+
+---
+
+## Soal 3 — Dashboard Analytics
+
+### Test 3.1 — Dashboard summary (cache MISS pertama)
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/dashboard` |
+
+**Expected:** `200 OK`, `from_cache: false`
+
+```json
+{
+  "from_cache": false,
+  "data": {
+    "stats": {
+      "total_revenue": 46165000,
+      "total_orders_today": 9,
+      "total_products_active": 13,
+      "low_stock_count": 1
+    },
+    "top_products": [
+      {"product_id": 6, "product_name": "Teh Premium Box",   "category": "Makanan & Minuman", "total_sold": 6, "price": "Rp 65.000"},
+      {"product_id": 8, "product_name": "Kaos Polos Cotton", "category": "Pakaian",           "total_sold": 5, "price": "Rp 75.000"},
+      ...
+    ],
+    "latest_orders": [
+      {
+        "id": 15,
+        "user":    {"id": 1, "name": "Test User", "email": "test@example.com"},
+        "product": {"id": 2, "name": "Mouse Logitech G502", "price": "Rp 850.000"},
+        "qty": 2,
+        "total_price": "Rp 1.700.000",
+        "status": "completed"
+      }
+      // ... 9 order lain
+    ]
+  }
+}
+```
+
+Field penting yang harus dicek di Postman:
+- `stats.total_revenue` — sum `total_price` dari order `status=completed`
+- `stats.total_orders_today` — count order dengan `created_at` hari ini
+- `stats.total_products_active` — `13` (15 dikurangi 2 inactive)
+- `stats.low_stock_count` — count produk dengan `stock < 5` (`1`: Laptop Asus ROG)
+- `top_products` — array 5 item, urut `total_sold` desc, masing-masing punya `category` (artinya Eager Loading `product.category` jalan)
+- `latest_orders` — array 10 item, masing-masing punya field `user` & `product` nested (artinya `with('user','product')` jalan)
+
+### Test 3.2 — Dashboard summary (cache HIT)
+
+Ulangi `GET {{base_url}}/api/dashboard` segera setelah test 3.1.
+
+**Expected:** `200 OK`, **`from_cache: true`** dengan payload `data` identik. Kalau di backend ada perubahan order baru, data tetap stale sampai cache expire (300 detik / 5 menit) atau di-flush manual.
+
+### Test 3.3 — Flush cache manual
+
+| Field | Value |
+|---|---|
+| Method | `DELETE` |
+| URL | `{{base_url}}/api/dashboard/cache` |
+
+**Expected:** `200 OK`
+
+```json
+{
+  "message": "Cache dashboard berhasil dihapus."
+}
+```
+
+### Test 3.4 — Verifikasi cache benar-benar terhapus
+
+Setelah Test 3.3, ulangi `GET {{base_url}}/api/dashboard`.
+
+**Expected:** `from_cache: false` lagi (cache sudah di-rebuild dari query).
+
+---
+
+## Bonus — Scoped Binding
+
+`GET {{base_url}}/api/users/{user}/orders/{order}`
+
+Route otomatis memastikan `order.user_id` sama dengan `{user}` lewat `->scopeBindings()`. Kalau order yang diminta bukan milik user di path, return 404.
+
+### Test B.1 — Valid (user 1 punya order 1)
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/users/1/orders/1` |
+
+**Expected:** `200 OK`
+
+```json
+{
+  "data": {
+    "id": 1,
+    "user":    {"id": 1, "name": "Test User", ...},
+    "product": {"id": 2, "name": "Mouse Logitech G502", ...},
+    "qty": 5,
+    "total_price": "Rp 4.250.000",
+    "status": "completed"
+  }
+}
+```
+
+### Test B.2 — Setup user kedua (sekali saja)
+
+Jalankan via tinker di terminal:
+
+```bash
+php artisan tinker --execute="App\Models\User::factory()->create(['name'=>'Other User','email'=>'other@test.com']);"
+```
+
+### Test B.3 — Invalid (user 2 coba akses order 1 yang dimiliki user 1)
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/users/2/orders/1` |
+| Headers | `Accept: application/json` |
+
+**Expected:** `404 Not Found`
+
+```json
+{
+  "message": "No query results for model [App\\Models\\Order] 1"
+}
+```
+
+Scoped binding berhasil mencegah user lain mengakses order yang bukan miliknya.
+
+### Test B.4 — User tidak ada
+
+| Field | Value |
+|---|---|
+| Method | `GET` |
+| URL | `{{base_url}}/api/users/999/orders/1` |
+| Headers | `Accept: application/json` |
+
+**Expected:** `404` dengan message `No query results for model [App\\Models\\User] 999`.
+
+---
+
+## Ringkasan Endpoint
+
+| Method | URL | Soal |
+|---|---|---|
+| `GET`    | `/api/products`                          | 1 |
+| `POST`   | `/api/orders`                            | 2 |
+| `GET`    | `/api/dashboard`                         | 3 |
+| `DELETE` | `/api/dashboard/cache`                   | 3 |
+| `GET`    | `/api/users/{user}/orders/{order}`       | Bonus |
+
+---
+
+## Struktur Direktori Penting
+
+```
+app/
+├── Http/
+│   ├── Controllers/Api/
+│   │   ├── ProductController.php      # Soal 1
+│   │   ├── OrderController.php        # Soal 2 + Bonus
+│   │   └── DashboardController.php    # Soal 3
+│   ├── Requests/
+│   │   └── StoreOrderRequest.php      # Soal 2 - Form Request + pesan ID
+│   └── Resources/
+│       ├── ProductResource.php        # Soal 1 - format Rupiah
+│       ├── OrderResource.php          # Soal 2
+│       └── OrderSummaryResource.php   # Soal 3 - nested user & product
+└── Models/
+    ├── Category.php
+    ├── Product.php
+    ├── Order.php
+    └── User.php
+
+database/
+├── migrations/
+│   ├── 2026_05_19_000001_create_categories_table.php
+│   ├── 2026_05_19_000002_create_products_table.php
+│   └── 2026_05_19_000003_create_orders_table.php
+└── seeders/
+    ├── DatabaseSeeder.php
+    ├── ProductSeeder.php
+    └── OrderSeeder.php
+
+routes/
+└── api.php
+```
+
+---
+
+## Troubleshooting
+
+**Error "Could not open input file: artisan"** — pastikan kamu di root folder project sebelum jalankan `php artisan ...`.
+
+**Error 404 saat akses `/api/products`** — pastikan `routes/api.php` ter-register di `bootstrap/app.php` (`api: __DIR__.'/../routes/api.php'` & `apiPrefix: 'api'`).
+
+**Cache tidak berubah meski data baru** — TTL 300 detik. Flush manual via `DELETE /api/dashboard/cache` atau tunggu 5 menit.
+
+**Validation error return HTML, bukan JSON** — tambahkan header `Accept: application/json` di Postman.
