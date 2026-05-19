@@ -1,55 +1,5 @@
 # Praktikum Laravel API — BAB III
 
-Implementasi tiga soal praktikum Laravel API:
-
-1. **Soal 1 (Beginner, 25%)** — `GET /api/products` dengan filter `is_active`, search, kategori, & pagination.
-2. **Soal 2 (Intermediate, 35%)** — `POST /api/orders` dengan Form Request, validasi Bahasa Indonesia, kalkulasi otomatis, & `DB::transaction()`.
-3. **Soal 3 (Expert, 40%)** — `GET /api/dashboard` analytics dengan agregasi, Eager Loading, dan caching 5 menit + endpoint flush manual.
-4. **Bonus (+10)** — Scoped Binding `GET /api/users/{user}/orders/{order}`.
-
-Stack: **Laravel 12** · PHP 8.2+ · SQLite.
-
----
-
-## Setup
-
-```bash
-# 1. Install dependencies
-composer install
-
-# 2. Siapkan environment
-cp .env.example .env
-php artisan key:generate
-
-# 3. Siapkan SQLite (otomatis kalau pakai .env default)
-touch database/database.sqlite
-
-# 4. Jalankan migration + seeder
-php artisan migrate:fresh --seed
-
-# 5. Jalankan server
-php artisan serve
-# default: http://127.0.0.1:8000
-```
-
-Seeder otomatis menyiapkan:
-- 1 user (`Test User`, id=1)
-- 4 kategori (`Elektronik`, `Makanan & Minuman`, `Pakaian`, `Aksesoris`)
-- 15 produk (2 di antaranya `is_active=false`)
-- 15 order dengan status & tanggal bervariasi (untuk testing dashboard)
-
----
-
-## Setup Postman
-
-1. Buat **Environment** baru, tambahkan variable `base_url` dengan value `http://127.0.0.1:8000`.
-2. Set header default di **Headers** tab untuk setiap request:
-   - `Accept: application/json` (wajib, biar Laravel return JSON saat error, bukan HTML)
-   - `Content-Type: application/json` (untuk request dengan body)
-3. Pakai `{{base_url}}` di URL setiap request.
-
----
-
 ## Soal 1 — GET Daftar Produk Aktif
 
 `GET {{base_url}}/api/products`
@@ -106,6 +56,10 @@ Endpoint mengembalikan hanya produk dengan `is_active=1`, terpaginasi 10 per hal
 | URL | `{{base_url}}/api/products?page=2` |
 
 **Expected:** `200 OK` — `data` berisi 3 produk terakhir, `meta.from: 11`, `meta.to: 13`, `links.next: null`.
+
+### Hasil Postman — Soal 1
+
+![Hasil Postman Soal 1](image.png)
 
 ---
 
@@ -195,6 +149,9 @@ Laptop Asus ROG (`product_id=1`) stock awal 5, di-request 10.
   }
 }
 ```
+### Hasil Postman — Soal 2
+
+![Hasil Postman Soal 2](image-1.png)
 
 **Verifikasi efek samping** — buka `GET /api/products?search=Laptop`:
 - Stok Laptop Asus ROG sekarang `3` (turun dari 5 karena `DB::transaction` menyimpan order + decrement stok secara atomic).
@@ -287,6 +244,10 @@ Setelah Test 3.3, ulangi `GET {{base_url}}/api/dashboard`.
 
 **Expected:** `from_cache: false` lagi (cache sudah di-rebuild dari query).
 
+### Hasil Postman — Soal 3
+
+![Hasil Postman Soal 3](image-2.png)
+
 ---
 
 ## Bonus — Scoped Binding
@@ -353,6 +314,10 @@ Scoped binding berhasil mencegah user lain mengakses order yang bukan miliknya.
 
 **Expected:** `404` dengan message `No query results for model [App\\Models\\User] 999`.
 
+### Hasil Postman — Bonus Scoped Binding
+
+![Hasil Postman Bonus](image-3.png)
+
 ---
 
 ## Ringkasan Endpoint
@@ -400,6 +365,9 @@ database/
 
 routes/
 └── api.php
+
+docs/
+└── screenshots/                       # Letakkan SS Postman di sini
 ```
 
 ---
